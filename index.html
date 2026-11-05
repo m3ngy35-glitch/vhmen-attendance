@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0a"><title>VH MEN · Attendance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Kantumruy+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top"><div><div class="brand">VH MEN</div><div class="sub">ATTENDANCE</div></div><div class="clock"><strong id="clock">--:--</strong><small id="date"></small></div></header>
+  <main>
+    <section class="screen" id="wifi"><div class="scan"><div class="icon">⌁</div><h1>Connect to the shop Wi‑Fi<span class="km">សូមភ្ជាប់ Wi‑Fi របស់ហាង</span></h1><p id="wifiText">Checking your network…</p><button class="btn" id="wifiRetry">Check again · ពិនិត្យម្តងទៀត</button></div></section>
+    <section class="screen" id="scan"><div class="scan"><div class="icon">▣</div><h1>Scan the QR code on the shop screen<span class="km">សូមស្កេន QR នៅលើអេក្រង់ហាង</span></h1><p>Open your phone camera and scan the live code at the shop.</p><p id="scanText" style="color:var(--warn)"></p></div></section>
+    <section class="screen" id="names"><div class="notice" id="qrBanner" hidden></div><h1>Select your name<span class="km">ជ្រើសរើសឈ្មោះរបស់អ្នក</span></h1><input id="search" class="search" type="search" placeholder="Search name…" autocomplete="off"><div class="names" id="nameList"></div></section>
+    <section class="screen" id="pin"><button class="back" id="back">‹ Back · ត្រឡប់</button><div class="who"><span class="avatar" id="avatar"></span><b id="person"></b></div><div class="center">Enter your PIN<span class="km">បញ្ចូលលេខសម្ងាត់</span></div><div class="dots" id="dots"></div><div class="error" id="pinError"></div><div class="pad" id="pad"></div><div class="actions"><button class="btn primary" id="in" disabled>CLOCK IN<span class="km">ចូលធ្វើការ</span></button><button class="btn" id="out" disabled>CLOCK OUT<span class="km">ចេញពីការងារ</span></button></div></section>
+    <section class="screen" id="result"><div class="result"><div class="ring" id="ring"></div><h2 id="resultTitle"></h2><div class="time" id="resultTime"></div><div class="detail" id="resultDetail"></div><button class="btn primary" id="done">Done · រួចរាល់</button></div></section>
+  </main>
+  <footer class="foot">Time is recorded securely by the server · Phnom Penh (UTC+7)</footer>
+  <div class="loading" id="loading"><div class="spinner"></div></div>
+  <script src="config.js"></script><script src="api.js"></script>
+  <script>
+  (function(){'use strict';
+    var $=function(id){return document.getElementById(id)}, S={staff:[],selected:null,pin:'',pass:'',passEnd:0,qrMode:'OFF',wifiRequired:false,wifiOk:false,ip:'',offset:0,busy:false,note:''};
+    var TZ='Asia/Phnom_Penh', tf=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}), df=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    var DEVICE=(function(){var k='vhm_dev',v='';try{v=localStorage.getItem(k)||''}catch(e){}if(!/^[A-Za-z0-9-]{16,64}$/.test(v)){v='d-'+Array.from(crypto.getRandomValues(new Uint8Array(24))).map(function(n){return(n%36).toString(36)}).join('');try{localStorage.setItem(k,v)}catch(e){}}return v})();
+    function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+    function initials(v){var p=String(v).trim().split(/\s+/);return((p[0]||'')[0]||'')+((p[1]||'')[0]||'')}
+    function show(id){['wifi','scan','names','pin','result'].forEach(function(x){$(x).classList.toggle('on',x===id)});scrollTo(0,0)}
+    function passLive(){return!!S.pass&&Date.now()<S.passEnd}
+    function home(){if(S.wifiRequired&&!S.wifiOk)show('wifi');else if(S.qrMode==='REQUIRED'&&!passLive()){ $('scanText').textContent=S.note;show('scan')}else{banner();show('names')}}
+    function banner(){var b=$('qrBanner');if(passLive()){var n=Math.ceil((S.passEnd-Date.now())/1000);b.hidden=false;b.className='notice ok';b.textContent='✓ Shop QR scanned · '+Math.floor(n/60)+':'+String(n%60).padStart(2,'0')+' left'}else if(S.qrMode==='FLAG'){b.hidden=false;b.className='notice warn';b.textContent=S.note||'QR not scanned; attendance will be marked for review.'}else b.hidden=true}
+    function renderNames(){var q=$('search').value.trim().toLowerCase(),a=S.staff.filter(function(x){return!q||x.name.toLowerCase().indexOf(q)>=0});$('search').hidden=S.staff.length<=10;$('nameList').innerHTML=a.length?a.map(function(x){return'<button class="name" data-id="'+esc(x.id)+'"><span class="avatar">'+esc(initials(x.name))+'</span><span>'+esc(x.name)+'</span></button>'}).join(''):'<p>No active staff found.</p>'}
+    function renderPin(){var n=Math.max(4,S.pin.length),h='';for(var i=0;i<n;i++)h+='<i class="dot '+(i<S.pin.length?'fill':'')+'"></i>';$('dots').innerHTML=h;var ok=S.pin.length>=4&&!S.busy;$('in').disabled=!ok;$('out').disabled=!ok}
+    function choose(id){S.selected=S.staff.filter(function(x){return x.id===id})[0];if(!S.selected)return;S.pin='';$('avatar').textContent=initials(S.selected.name);$('person').textContent=S.selected.name;$('pinError').textContent='';renderPin();show('pin')}
+    function reset(){S.selected=null;S.pin='';renderNames();home()}
+    function key(k){if(k==='del')S.pin=S.pin.slice(0,-1);else if(k==='clear')S.pin='';else if(S.pin.length<6)S.pin+=k;$('pinError').textContent='';renderPin()}
+    function network(){if(!S.wifiRequired){S.wifiOk=true;return Promise.resolve(true)}$('wifiText').textContent='Checking your network…';show('wifi');return fetch('https://api.ipify.org?format=json',{cache:'no-store'}).then(function(r){return r.json()}).then(function(x){S.ip=String(x.ip||'');return VH.call('checkWifi',S.ip)}).then(function(r){S.wifiOk=!!(r.ok&&r.data.allowed);$('wifiText').textContent=S.wifiOk?'Shop Wi‑Fi confirmed.':'This is not the approved shop Wi‑Fi.';return S.wifiOk}).catch(function(){$('wifiText').textContent='Could not verify the network. Try again.';return false})}
+    function finish(r,action){S.busy=false;$('loading').hidden=true;S.pin='';renderPin();if(r&&r.ok){var d=r.data;if(d.method==='QR')S.pass='';$('ring').className='ring ok';$('ring').textContent='✓';$('resultTitle').innerHTML=esc(d.name)+'<span class="km">'+(d.event==='IN'?'បានចូលធ្វើការ · Clocked in':'បានចេញពីការងារ · Clocked out')+'</span>';$('resultTime').textContent=d.time;$('resultDetail').textContent=d.event==='IN'?(d.late?'Late by '+d.lateMinutes+' min':'On time'):'In '+d.in+' → Out '+d.time+' · '+Number(d.hours).toFixed(2)+' h';show('result');return}var code=r&&r.code,msg=r&&r.error||'Connection problem. Please try again.';if(code==='BAD_PIN'){$('pinError').textContent=msg;show('pin');return}if(code==='QR_REQUIRED'||code==='QR_EXPIRED'){S.pass='';S.note=msg}$('ring').className='ring bad';$('ring').textContent='×';$('resultTitle').textContent=action==='IN'?'Clock-in not recorded':'Clock-out not recorded';$('resultTime').textContent='';$('resultDetail').textContent=msg;show('result')}
+    function punch(action){if(S.busy||!S.selected)return;S.busy=true;$('loading').hidden=false;var pin=S.pin;network().then(function(ok){if(!ok)return finish({ok:false,code:'WIFI_REQUIRED',error:'Connect to the shop Wi‑Fi, then try again.'},action);return VH.call('punch',S.selected.id,pin,action,{pass:passLive()?S.pass:'',device:DEVICE,networkIp:S.ip}).then(function(r){finish(r,action)}).catch(function(){finish(null,action)})})}
+    function boot(){var scan=new URLSearchParams(location.search).get('scan'),claim=scan?VH.call('claimQr',scan):Promise.resolve(null);return claim.then(function(r){if(r&&r.ok){S.pass=r.data.pass;S.passEnd=Date.now()+r.data.expiresIn*1000}else if(scan)S.note=r&&r.error||'This QR code expired. Scan the new code.'}).catch(function(){if(scan)S.note='Could not verify this QR code.'}).then(function(){return VH.call('kioskBoot')}).then(function(r){if(!r.ok)throw new Error(r.error);var d=r.data;S.staff=d.staff;S.qrMode=d.qrMode;S.wifiRequired=!!d.wifiRequired;S.offset=d.serverTime-Date.now();renderNames();return network()}).then(function(){home();$('loading').hidden=true}).catch(function(e){$('loading').hidden=true;S.note=e.message;show('scan');$('scanText').textContent='Cannot connect to attendance server: '+e.message})}
+    $('nameList').onclick=function(e){var b=e.target.closest('.name');if(b)choose(b.dataset.id)};$('search').oninput=renderNames;$('back').onclick=reset;$('done').onclick=reset;$('wifiRetry').onclick=function(){network().then(home)};$('in').onclick=function(){punch('IN')};$('out').onclick=function(){punch('OUT')};
+    var keys=['1','2','3','4','5','6','7','8','9','clear','0','del'];$('pad').innerHTML=keys.map(function(k){return'<button class="key '+(k.length>1?'fn':'')+'" data-k="'+k+'">'+(k==='del'?'⌫':k==='clear'?'Clear':k)+'</button>'}).join('');$('pad').onclick=function(e){var b=e.target.closest('.key');if(b)key(b.dataset.k)};
+    setInterval(function(){var d=new Date(Date.now()+S.offset);$('clock').textContent=tf.format(d);$('date').textContent=df.format(d);if(passLive()&&$('names').classList.contains('on'))banner()},1000);boot();
+  })();
+  </script>
+</body></html>
